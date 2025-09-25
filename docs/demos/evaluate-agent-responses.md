@@ -18,7 +18,7 @@
 
 ---
 
-​**Instructions**: Switch to the v3-manual-eval agent version. Review the data and responses in the table.
+​**Instructions**: Switch to the v3-manual-evaluation agent version. Review the data and responses in the table.
 
 **Script**:  I have the dataset here that Serena used and I've run each row to get Cora's response.
 
