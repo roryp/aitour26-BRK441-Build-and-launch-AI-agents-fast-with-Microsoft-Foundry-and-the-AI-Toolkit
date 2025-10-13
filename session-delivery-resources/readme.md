@@ -14,7 +14,7 @@ Prior to delivering the workshop please:
 | Resources          | Links                            | Description |
 |-------------------|----------------------------------|-------------------|
 | Session Delivery Deck     |  [Deck](https://aka.ms/AAxryus) | The session delivery slides |
-| Full Session | [Recording Link](https://youtu.be/uX66bjIKiaE) | The full session presentation |
+| Full Session | [Recording Link](aka.ms/AAxq4rj) | The full session presentation |
 
 
 
