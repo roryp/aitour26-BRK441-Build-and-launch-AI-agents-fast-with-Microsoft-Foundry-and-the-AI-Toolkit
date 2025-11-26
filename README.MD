@@ -13,7 +13,7 @@ If you will be delivering this session, check the [session-delivery-sources](./s
 
 ### Session Description
 
-Build and ship AI agents faster with Microsoft Foundry Models and Azure. Prototype with open models, scale with Foundry models, and streamline workflows using the AI Toolkit in VS Code. Experiment with models and prompts, evaluate agent responses, then move from prototype to cloud with cutting-edge developer tools.
+Build and ship AI agents fast with Microsoft Foundry Models and Azure. Prototype with open models, scale with Foundry models, and streamline workflows using the AI Toolkit in VS Code. Experiment with models and prompts, evaluate agent responses, then move from prototype to cloud with cutting-edge developer tools.
 
 ### 🧠 Learning Outcomes
 
