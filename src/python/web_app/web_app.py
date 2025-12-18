@@ -1,5 +1,6 @@
 # http://localhost:8000
 
+import sys
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -61,9 +62,12 @@ def get_image_mime_type(filename: str) -> str:
     return mime_types.get(extension, 'image/jpeg')
 
 # Agent Framework Configuration - matching cora-agent-demo.py
-ENDPOINT = os.environ.get("AZURE_AI_FOUNDRY_ENDPOINT", "your_foundry_endpoint_here")
-MODEL_DEPLOYMENT_NAME = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini")
+ENDPOINT = os.environ.get("PROJECT_ENDPOINT", os.environ.get("AZURE_AI_FOUNDRY_ENDPOINT", "your_foundry_endpoint_here"))
+MODEL_DEPLOYMENT_NAME = os.environ.get("GPT_MODEL_DEPLOYMENT_NAME", os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"))
 AGENT_NAME = "cora-web-agent"
+
+# Workspace root for absolute paths (ensures MCP server works regardless of cwd)
+WORKSPACE_ROOT = Path(__file__).resolve().parents[3]  # -> /workspace
 
 def create_mcp_tools() -> list[ToolProtocol]:
     """Create MCP tools for the agent"""
@@ -71,9 +75,9 @@ def create_mcp_tools() -> list[ToolProtocol]:
         MCPStdioTool(
             name="zava_customer_sales_stdio",
             description="MCP server for Zava customer sales analysis",
-            command="python",
+            command=sys.executable,
             args=[
-                "src/python/mcp_server/customer_sales/customer_sales.py",
+                str(WORKSPACE_ROOT / "src/python/mcp_server/customer_sales/customer_sales.py"),
                 "--stdio",
                 "--RLS_USER_ID=00000000-0000-0000-0000-000000000000",
             ]
@@ -121,12 +125,14 @@ async def initialize_agent():
         try:
             # Use AzureCliCredential like cora-agent-demo.py
             credential_instance = AzureCliCredential()
+            # Enter the async context manager to initialize credential
+            await credential_instance.__aenter__()
             
             # Create AzureAIClient for Foundry project endpoint
             client = AzureAIClient(
                 project_endpoint=ENDPOINT,
                 model_deployment_name=MODEL_DEPLOYMENT_NAME,
-                async_credential=credential_instance,
+                credential=credential_instance,
                 agent_name=AGENT_NAME,
             )
             
