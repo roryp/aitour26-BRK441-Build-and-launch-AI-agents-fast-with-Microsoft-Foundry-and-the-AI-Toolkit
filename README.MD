@@ -15,6 +15,84 @@ If you will be delivering this session, check the [session-delivery-sources](./s
 
 Build and ship AI agents fast with Microsoft Foundry Models and Azure. Prototype with open models, scale with Foundry models, and streamline workflows using the AI Toolkit in VS Code. Experiment with models and prompts, evaluate agent responses, then move from prototype to cloud with cutting-edge developer tools.
 
+---
+
+## 📖 Application Overview
+
+### What is Cora?
+
+**Cora** is an AI-powered shopping assistant for Zava, a home improvement retail brand. Cora enables customers to interact with a conversational AI that understands natural language queries about DIY projects and provides intelligent product recommendations from the store's inventory.
+
+#### Key Capabilities
+
+- **Natural Language Understanding**: Customers can ask questions like "What drill should I buy for hanging shelves?" and receive contextual recommendations
+- **Product Search & Discovery**: AI-powered search across the complete product catalog with semantic understanding
+- **Personalized Recommendations**: Suggestions tailored to the customer's project requirements and preferences
+- **Real-time Inventory Access**: Direct integration with the product database for accurate, up-to-date information
+
+### Technical Architecture
+
+The application follows a modern AI agent architecture with three primary layers:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           User Interface                                │
+│                     (FastAPI Web Application)                           │
+└─────────────────────────────────────┬───────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           AI Agent Layer                                │
+│                                                                         │
+│  ┌─────────────────┐         ┌─────────────────┐                       │
+│  │   GPT-4o-mini   │◄───────►│   MCP Client    │                       │
+│  │   (Reasoning)   │         │   (Tool Calls)  │                       │
+│  └─────────────────┘         └────────┬────────┘                       │
+│                                       │                                 │
+└───────────────────────────────────────┼─────────────────────────────────┘
+                                        │ MCP Protocol
+                                        ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           Data Layer                                    │
+│                                                                         │
+│  ┌─────────────────┐         ┌─────────────────┐                       │
+│  │   MCP Server    │────────►│   PostgreSQL    │                       │
+│  │ (Tool Provider) │         │   (pgvector)    │                       │
+│  └─────────────────┘         └─────────────────┘                       │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Model Context Protocol (MCP)
+
+The application leverages **Model Context Protocol (MCP)** to enable secure, structured communication between the AI model and external data sources.
+
+#### What is MCP?
+
+MCP is an open protocol that standardizes how AI models interact with tools and data sources. Rather than allowing arbitrary code execution, MCP provides a controlled interface where:
+
+1. **Tools are predefined**: The MCP server exposes specific functions (e.g., `get_products_by_name`, `get_customer_sales_summary`)
+2. **Security is enforced**: The AI can only call approved functions with validated parameters
+3. **Modularity is enabled**: New capabilities can be added by extending the MCP server without modifying the AI model
+
+#### MCP Tools in This Application
+
+| Tool | Description |
+|------|-------------|
+| `get_products_by_name` | Search products by keyword or description |
+| `get_customer_sales_summary` | Retrieve customer purchase history |
+| `get_schema_information` | Query database structure for context |
+
+#### Request Flow
+
+```
+1. User Query     →  "Show me cordless drills under $200"
+2. AI Reasoning   →  Determines need to search product database
+3. MCP Tool Call  →  get_products_by_name("cordless drill", max_price=200)
+4. Database Query →  SQL executed on PostgreSQL with pgvector
+5. Response       →  Formatted product recommendations returned to user
+```
+
 ### 🧠 Learning Outcomes
 
 By the end of this session, learners will be able to:
