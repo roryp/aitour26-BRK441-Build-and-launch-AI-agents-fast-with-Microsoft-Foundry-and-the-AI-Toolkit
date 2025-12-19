@@ -44,6 +44,135 @@ By the end of this session, learners will be able to:
 | Microsoft Foundry Community Discord | [![Microsoft Foundry Discord](https://dcbadge.limes.pink/api/server/Pwpvf3TWaw)](https://aka.ms/MicrosoftFoundryDiscord-AITour26)| Connect with the Azure AI Foundry Community! |
 | Learn at AI Tour | https://aka.ms/LearnAtAITour | Continue learning on Microsoft Learn |
 
+---
+
+## 🚀 Azure Container Apps Deployment
+
+This branch (`azure-container-apps-deployment`) contains the infrastructure and configuration to deploy the Cora AI Agent to Azure Container Apps using the Azure Developer CLI (azd).
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Azure Resource Group                            │
+│                         (rg-zava-cora-dev)                              │
+│                                                                         │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐     │
+│  │  Container App  │────│  Container      │    │  Log Analytics  │     │
+│  │  (Cora Web App) │    │  Registry (ACR) │    │  Workspace      │     │
+│  └────────┬────────┘    └─────────────────┘    └─────────────────┘     │
+│           │                                                             │
+│           │ Managed Identity                                            │
+│           ▼                                                             │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐     │
+│  │  Azure AI       │    │  PostgreSQL     │    │  Application    │     │
+│  │  Foundry        │    │  Flexible Server│    │  Insights       │     │
+│  │  (gpt-4o-mini)  │    │  (pgvector)     │    │                 │     │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Prerequisites
+
+- [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- Azure subscription with sufficient quota for AI models
+
+### Quick Start
+
+1. **Login to Azure:**
+   ```bash
+   az login
+   azd auth login
+   ```
+
+2. **Initialize and deploy:**
+   ```bash
+   azd init
+   azd up
+   ```
+
+3. **Access the application:**
+   After deployment, the Container App URL will be displayed (e.g., `https://ca-cora-xxx.azurecontainerapps.io`)
+
+### Infrastructure Components
+
+| Component | Description |
+|-----------|-------------|
+| **Container Apps Environment** | Serverless container hosting with auto-scaling |
+| **Container Registry** | Private ACR for Docker images with managed identity pull |
+| **Azure AI Foundry** | GPT-4o-mini and text-embedding-3-small model deployments |
+| **PostgreSQL Flexible Server** | Database with pgvector extension for embeddings |
+| **Managed Identity** | Secure authentication to AI Foundry (no API keys!) |
+| **Application Insights** | Monitoring and telemetry |
+| **Log Analytics Workspace** | Centralized logging |
+
+### Key Files Added
+
+```
+├── Dockerfile                    # Multi-stage Docker build for web app
+├── docker-compose.full.yml       # Local development with Docker
+├── azure.yaml                    # Azure Developer CLI configuration
+├── DOCKER.md                     # Docker documentation
+└── infra/
+    ├── main.bicep                # Main infrastructure orchestration
+    ├── container-apps.bicep      # Container Apps Environment & App
+    ├── container-registry.bicep  # ACR with managed identity
+    ├── postgresql.bicep          # PostgreSQL with pgvector
+    ├── managed-identity.bicep    # User-assigned managed identity
+    ├── ai-foundry-role-assignment.bicep  # RBAC for AI Foundry
+    └── log-analytics.bicep       # Monitoring workspace
+```
+
+### Code Changes for Azure Deployment
+
+1. **Managed Identity Authentication** - Updated `web_app.py` to use `ManagedIdentityCredential` instead of API keys when running in Azure
+2. **MCP Environment Variables** - Pass `POSTGRES_URL` to MCP subprocess via `env` parameter for database connectivity
+3. **Health Checks** - Container app includes liveness and readiness probes at `/health`
+
+### Local Development with Docker
+
+```bash
+# Copy environment template
+cp .env.docker .env
+
+# Edit .env with your Azure AI Foundry values
+# Get an access token
+az account get-access-token --resource "https://ai.azure.com" --query accessToken -o tsv
+
+# Start the application
+docker-compose -f docker-compose.full.yml up --build
+```
+
+### Useful Commands
+
+```bash
+# View container logs
+az containerapp logs show -n ca-cora-xxx -g rg-zava-cora-dev --tail 100
+
+# Redeploy after code changes
+azd deploy
+
+# View all deployed resources
+az resource list -g rg-zava-cora-dev -o table
+
+# Remove delete lock (if needed for cleanup)
+az lock delete --name DoNotDelete-ZavaCora --resource-group rg-zava-cora-dev
+
+# Tear down all resources
+azd down
+```
+
+### Security Features
+
+- ✅ **Managed Identity** - No API keys or secrets in code
+- ✅ **Private Container Registry** - Images stored in private ACR
+- ✅ **Delete Lock** - Resource group protected from accidental deletion
+- ✅ **HTTPS Only** - Container App ingress requires HTTPS
+- ✅ **RBAC** - Least-privilege access with Cognitive Services User role
+
 ### 🌐 Multi-Language Support
 
 Additional languages are coming soon.
