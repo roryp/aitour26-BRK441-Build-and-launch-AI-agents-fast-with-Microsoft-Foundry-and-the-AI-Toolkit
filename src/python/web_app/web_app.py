@@ -27,7 +27,29 @@ TEMPLATES_DIR = STATIC_DIR if STATIC_DIR.exists() else Path("templates")
 # Agent Framework imports
 from agent_framework import ChatAgent, MCPStdioTool, ToolProtocol, ChatMessage, TextContent, DataContent
 from agent_framework.azure import AzureAIClient
-from azure.identity.aio import AzureCliCredential
+from azure.identity.aio import DefaultAzureCredential, ManagedIdentityCredential
+from azure.core.credentials import AccessToken
+import time
+
+
+class StaticTokenCredential:
+    """Credential that uses a pre-fetched access token."""
+    
+    def __init__(self, token: str, expires_on: int):
+        self._token = token
+        self._expires_on = expires_on
+    
+    async def get_token(self, *scopes: str, **kwargs) -> AccessToken:
+        return AccessToken(self._token, self._expires_on)
+    
+    async def close(self) -> None:
+        pass
+    
+    async def __aenter__(self):
+        return self
+    
+    async def __aexit__(self, *args):
+        pass
 
 
 from dotenv import load_dotenv
@@ -64,6 +86,12 @@ def get_image_mime_type(filename: str) -> str:
 # Agent Framework Configuration - matching cora-agent-demo.py
 ENDPOINT = os.environ.get("PROJECT_ENDPOINT", os.environ.get("AZURE_AI_FOUNDRY_ENDPOINT", "your_foundry_endpoint_here"))
 MODEL_DEPLOYMENT_NAME = os.environ.get("GPT_MODEL_DEPLOYMENT_NAME", os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"))
+# API Key for authentication (get from Azure AI Foundry portal -> Keys)
+API_KEY = os.environ.get("AZURE_AI_API_KEY", os.environ.get("AZURE_OPENAI_API_KEY", ""))
+# Pre-fetched access token (optional - for Docker environments)
+ACCESS_TOKEN = os.environ.get("AZURE_ACCESS_TOKEN", "")
+# Managed Identity Client ID (for Azure Container Apps)
+MANAGED_IDENTITY_CLIENT_ID = os.environ.get("AZURE_CLIENT_ID", "")
 AGENT_NAME = "cora-web-agent"
 
 # Workspace root for absolute paths (ensures MCP server works regardless of cwd)
@@ -71,6 +99,12 @@ WORKSPACE_ROOT = Path(__file__).resolve().parents[3]  # -> /workspace
 
 def create_mcp_tools() -> list[ToolProtocol]:
     """Create MCP tools for the agent"""
+    # Pass environment variables to MCP subprocess
+    # This is required because subprocess doesn't always inherit parent env
+    mcp_env = {
+        "POSTGRES_URL": os.environ.get("POSTGRES_URL", ""),
+        "PYTHONPATH": os.environ.get("PYTHONPATH", "/workspace/src/python"),
+    }
     return [
         MCPStdioTool(
             name="zava_customer_sales_stdio",
@@ -80,7 +114,8 @@ def create_mcp_tools() -> list[ToolProtocol]:
                 str(WORKSPACE_ROOT / "src/python/mcp_server/customer_sales/customer_sales.py"),
                 "--stdio",
                 "--RLS_USER_ID=00000000-0000-0000-0000-000000000000",
-            ]
+            ],
+            env=mcp_env,
         ),
     ]
 
@@ -123,10 +158,21 @@ async def initialize_agent():
     global agent_instance, credential_instance
     if agent_instance is None:
         try:
-            # Use AzureCliCredential like cora-agent-demo.py
-            credential_instance = AzureCliCredential()
-            # Enter the async context manager to initialize credential
-            await credential_instance.__aenter__()
+            # Authentication priority:
+            # 1. Pre-fetched access token (for local Docker)
+            # 2. Managed Identity (for Azure Container Apps)
+            # 3. DefaultAzureCredential (fallback)
+            if ACCESS_TOKEN:
+                logger.info("Using pre-fetched access token for authentication")
+                # Token expires in ~1 hour, set to 55 min from now
+                credential_instance = StaticTokenCredential(ACCESS_TOKEN, int(time.time()) + 3300)
+            elif MANAGED_IDENTITY_CLIENT_ID:
+                logger.info(f"Using Managed Identity for authentication (client_id: {MANAGED_IDENTITY_CLIENT_ID[:8]}...)")
+                credential_instance = ManagedIdentityCredential(client_id=MANAGED_IDENTITY_CLIENT_ID)
+            else:
+                # Fall back to DefaultAzureCredential (works with managed identity, env vars, etc.)
+                logger.info("Using DefaultAzureCredential for authentication")
+                credential_instance = DefaultAzureCredential()
             
             # Create AzureAIClient for Foundry project endpoint
             client = AzureAIClient(
@@ -343,12 +389,8 @@ async def shutdown_event():
             logger.error(f"Error during agent cleanup: {e}")
         agent_instance = None
     
-    if credential_instance:
-        try:
-            await credential_instance.close()
-        except Exception as e:
-            logger.error(f"Error during credential cleanup: {e}")
-        credential_instance = None
+    # AzureKeyCredential doesn't need async cleanup
+    credential_instance = None
 
 if __name__ == "__main__":
     uvicorn.run(

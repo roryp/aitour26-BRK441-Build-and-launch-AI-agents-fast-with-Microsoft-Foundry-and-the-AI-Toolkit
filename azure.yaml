@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: zava-cora-agent
+metadata:
+  template: zava-cora-agent@1.0.0
+
+# Use custom infrastructure in ./infra folder
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  # Cora Web Application - the main AI agent chat interface
+  web-app:
+    project: .
+    language: python
+    host: containerapp
+    docker:
+      path: Dockerfile
+      context: .
+
+# Azure Developer CLI hooks
+hooks:
+  # Pre-provision: ensure user is logged in
+  preprovision:
+    shell: pwsh
+    run: |
+      Write-Host "Checking Azure login status..."
+      $account = az account show 2>$null | ConvertFrom-Json
+      if (-not $account) {
+        Write-Host "Not logged in. Please run 'az login' first."
+        exit 1
+      }
+      Write-Host "Logged in as: $($account.user.name)"
+
+  # Post-provision: display connection info
+  postprovision:
+    shell: pwsh
+    run: |
+      Write-Host ""
+      Write-Host "=== Deployment Complete ===" -ForegroundColor Green
+      Write-Host "Web App URL: $env:SERVICE_WEB_APP_URI"
+      Write-Host "AI Project: $env:AZURE_AI_PROJECT_NAME"
+      Write-Host ""
+      Write-Host "To view logs: az containerapp logs show -n $env:SERVICE_WEB_APP_NAME -g $env:AZURE_RESOURCE_GROUP"

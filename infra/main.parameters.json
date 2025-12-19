@@ -1,36 +1,24 @@
 {
-  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
   "contentVersion": "1.0.0.0",
   "parameters": {
-    "resourcePrefix": {
-      "value": "zava-agent-workshop"
+    "environmentName": {
+      "value": "${AZURE_ENV_NAME}"
     },
     "location": {
-      "value": "eastus"
+      "value": "${AZURE_LOCATION}"
     },
     "aiProjectFriendlyName": {
-      "value": "Zava Agent Service Workshop"
+      "value": "Zava Cora Agent Project"
     },
     "aiProjectDescription": {
-      "value": "A standard project resource required for the agent setup."
+      "value": "Cora AI Assistant for Zava home improvement store"
     },
-    "models": {
-      "value": [
-        {
-          "name": "gpt-4o-mini",
-          "format": "OpenAI",
-          "version": "2024-07-18",
-          "skuName": "GlobalStandard",
-          "capacity": 140
-        },
-        {
-          "name": "text-embedding-3-small",
-          "format": "OpenAI",
-          "version": "1",
-          "skuName": "GlobalStandard",
-          "capacity": 120
-        }
-      ]
+    "postgresAdminPassword": {
+      "value": "$(secretOrRandomPassword ${AZURE_KEY_VAULT_NAME} postgres-admin-password)"
+    },
+    "webAppImageName": {
+      "value": "${SERVICE_WEB_APP_IMAGE_NAME}"
     }
   }
 }
