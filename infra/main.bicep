@@ -39,14 +39,14 @@ param models array = [
     format: 'OpenAI'
     version: '2024-07-18'
     skuName: 'GlobalStandard'
-    capacity: 50
+    capacity: 10
   }
   {
     name: 'text-embedding-3-small'
     format: 'OpenAI'
     version: '1'
     skuName: 'GlobalStandard'
-    capacity: 50
+    capacity: 10
   }
 ]
 
