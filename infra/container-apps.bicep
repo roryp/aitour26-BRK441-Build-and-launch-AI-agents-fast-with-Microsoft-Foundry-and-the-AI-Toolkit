@@ -43,12 +43,15 @@ param managedIdentityId string
 @description('User Assigned Managed Identity Client ID')
 param managedIdentityClientId string
 
+@description('Subnet ID for VNet integration (optional)')
+param subnetId string = ''
+
 // Reference the existing container registry
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: containerRegistryName
 }
 
-// Container Apps Environment
+// Container Apps Environment (Consumption plan - no VNet integration)
 resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: containerAppsEnvName
   location: location
@@ -69,7 +72,7 @@ resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2024-03-01'
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: containerAppName
   location: location
-  tags: tags
+  tags: union(tags, { 'azd-service-name': 'web-app' })
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {

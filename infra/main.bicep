@@ -94,6 +94,7 @@ var containerRegistryName = '${abbrs.containerRegistry}${resourceToken}'
 var logAnalyticsName = '${abbrs.logAnalytics}${resourceToken}'
 var managedIdentityName = '${abbrs.managedIdentity}${resourceToken}'
 var postgresServerName = '${abbrs.postgresql}${resourceToken}'
+var vnetName = 'vnet-${resourceToken}'
 
 // ===================================================================
 // Core Infrastructure Modules
@@ -266,6 +267,7 @@ output APPLICATIONINSIGHTS_CONNECTION_STRING string = applicationInsights.output
 // PostgreSQL
 output POSTGRES_SERVER_NAME string = postgresql.outputs.serverName
 output POSTGRES_DATABASE_NAME string = postgresql.outputs.databaseName
+output POSTGRES_ADMIN_PASSWORD string = postgresAdminPassword
 
 // Managed Identity
 output AZURE_CLIENT_ID string = managedIdentity.outputs.managedIdentityClientId

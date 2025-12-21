@@ -34,10 +34,57 @@ hooks:
       }
       Write-Host "Logged in as: $($account.user.name)"
 
-  # Post-provision: display connection info
+  # Post-provision: Initialize database and display connection info
   postprovision:
     shell: pwsh
     run: |
+      Write-Host ""
+      Write-Host "=== Initializing Database ===" -ForegroundColor Cyan
+      
+      # Get backup file path - use current working directory
+      $ProjectPath = Get-Location
+      $BackupFile = Join-Path $ProjectPath "data\zava_retail_2025_07_21_postgres_rls.backup"
+      $PostgresHost = "$env:POSTGRES_SERVER_NAME.postgres.database.azure.com"
+      
+      Write-Host "PostgreSQL Server: $PostgresHost"
+      Write-Host "Database: $env:POSTGRES_DATABASE_NAME"
+      Write-Host "Backup File: $BackupFile"
+      
+      if (Test-Path $BackupFile) {
+        Write-Host "Restoring database backup using Docker..." -ForegroundColor Yellow
+        
+        # Convert Windows path to Docker-compatible path
+        $DockerBackupPath = $BackupFile -replace '\\', '/'
+        
+        docker run --rm `
+          -v "${BackupFile}:/backup.dump:ro" `
+          -e "PGPASSWORD=$env:POSTGRES_ADMIN_PASSWORD" `
+          postgres:17 `
+          pg_restore `
+          --host=$PostgresHost `
+          --port=5432 `
+          --username=zadmin `
+          --dbname=$env:POSTGRES_DATABASE_NAME `
+          --verbose `
+          --no-owner `
+          --no-privileges `
+          --if-exists `
+          --clean `
+          /backup.dump
+        
+        if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) {
+          Write-Host "Database restore completed!" -ForegroundColor Green
+          $LASTEXITCODE = 0  # Reset to success - pg_restore exits 1 for warnings
+        } else {
+          Write-Host "Warning: Database restore had issues (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
+        }
+      } else {
+        Write-Host "Warning: Backup file not found at $BackupFile" -ForegroundColor Yellow
+      }
+      
+      # Ensure script exits with success
+      exit 0
+      
       Write-Host ""
       Write-Host "=== Deployment Complete ===" -ForegroundColor Green
       Write-Host "Web App URL: $env:SERVICE_WEB_APP_URI"

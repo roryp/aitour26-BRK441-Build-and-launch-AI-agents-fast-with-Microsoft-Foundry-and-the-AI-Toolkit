@@ -32,6 +32,12 @@ param skuTier string = 'Burstable'
 @description('Storage size in GB')
 param storageSizeGB int = 32
 
+@description('Subnet ID for VNet integration')
+param subnetId string = ''
+
+@description('Private DNS Zone ID for VNet integration')
+param privateDnsZoneId string = ''
+
 // PostgreSQL Flexible Server
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-preview' = {
   name: serverName
@@ -55,16 +61,32 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-12-01-pr
     highAvailability: {
       mode: 'Disabled'
     }
+    // VNet integration - use private access when subnet is provided
+    network: !empty(subnetId) ? {
+      delegatedSubnetResourceId: subnetId
+      privateDnsZoneArmResourceId: privateDnsZoneId
+    } : null
   }
 }
 
-// Allow Azure services to access the server
-resource firewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = {
+// Firewall rule - Allow Azure services (works for most Azure services)
+resource firewallRuleAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = {
   parent: postgresServer
   name: 'AllowAllAzureServices'
   properties: {
     startIpAddress: '0.0.0.0'
     endIpAddress: '0.0.0.0'
+  }
+}
+
+// Firewall rule - Allow all IPs (Container Apps consumption tier has dynamic outbound IPs)
+// TODO: For production, restrict this to specific IP ranges
+resource firewallRuleAllIPs 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-12-01-preview' = {
+  parent: postgresServer
+  name: 'AllowContainerApps'
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '255.255.255.255'
   }
 }
 
