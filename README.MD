@@ -128,12 +128,22 @@ By the end of this session, learners will be able to:
 
 This branch (`azure-container-apps-deployment`) contains the infrastructure and configuration to deploy the Cora AI Agent to Azure Container Apps using the Azure Developer CLI (azd).
 
+### Deployment Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Container App | ✅ Verified | Auto-scaling enabled |
+| PostgreSQL | ✅ Verified | pgvector extension with retail schema |
+| AI Models | ✅ Verified | gpt-4o-mini + text-embedding-3-small |
+| Database Restore | ✅ Automated | Via postprovision hook |
+| Managed Identity | ✅ Verified | No API keys required |
+
 ### Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         Azure Resource Group                            │
-│                         (rg-zava-cora-dev)                              │
+│                         (rg-{environment-name})                         │
 │                                                                         │
 │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐     │
 │  │  Container App  │────│  Container      │    │  Log Analytics  │     │
@@ -155,8 +165,11 @@ This branch (`azure-container-apps-deployment`) contains the infrastructure and 
 
 - [Azure CLI](https://docs.microsoft.com/cli/azure/install-azure-cli)
 - [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-- Azure subscription with sufficient quota for AI models
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) - Required for container builds and database restore
+- Azure subscription with sufficient quota for:
+  - Azure AI Foundry (gpt-4o-mini, text-embedding-3-small)
+  - Azure Database for PostgreSQL Flexible Server
+  - Azure Container Apps
 
 ### Quick Start
 
@@ -166,42 +179,108 @@ This branch (`azure-container-apps-deployment`) contains the infrastructure and 
    azd auth login
    ```
 
-2. **Initialize and deploy:**
+2. **Initialize environment (first time only):**
    ```bash
    azd init
-   azd up
    ```
 
-3. **Access the application:**
-   After deployment, the Container App URL will be displayed (e.g., `https://ca-cora-xxx.azurecontainerapps.io`)
+3. **Set location (recommended: East US 2):**
+   ```bash
+   # Note: East US may be restricted for PostgreSQL in some subscriptions
+   azd env set AZURE_LOCATION eastus2
+   ```
+
+4. **Deploy everything:**
+   ```bash
+   azd up --no-prompt
+   ```
+   
+   This command will:
+   - Build the Docker container
+   - Provision all Azure resources (~8-10 minutes)
+   - Restore the PostgreSQL database with product data (via postprovision hook)
+   - Deploy the container to Azure Container Apps
+
+5. **Access the application:**
+   ```bash
+   # Get the deployed URL
+   azd env get-values | grep SERVICE_WEB_APP_URI
+   ```
+
+### Manual Database Restore (if needed)
+
+If the postprovision hook doesn't run automatically, restore the database manually:
+
+```powershell
+# Get connection details
+$env = azd env get-values | ConvertFrom-StringData
+
+# Run pg_restore using Docker
+docker run --rm `
+  -v "${PWD}/data/zava_retail_2025_07_21_postgres_rls.backup:/backup.dump:ro" `
+  -e "PGPASSWORD=$($env.POSTGRES_ADMIN_PASSWORD)" `
+  postgres:17 `
+  pg_restore `
+  --host="$($env.POSTGRES_SERVER_NAME).postgres.database.azure.com" `
+  --port=5432 `
+  --username=zadmin `
+  --dbname=zava `
+  --verbose `
+  --no-owner `
+  --no-privileges `
+  --if-exists `
+  --clean `
+  /backup.dump
+```
+
+### Known Issues & Workarounds
+
+| Issue | Solution |
+|-------|----------|
+| PostgreSQL "LocationIsOfferRestricted" error | Use `eastus2` instead of `eastus`: `azd env set AZURE_LOCATION eastus2` |
+| `transaction_timeout` warning during restore | Safe to ignore - PostgreSQL 17 feature not supported on Azure |
+| Resource group deletion still in progress | Wait 2-3 minutes and retry `azd up` |
 
 ### Infrastructure Components
 
-| Component | Description |
-|-----------|-------------|
-| **Container Apps Environment** | Serverless container hosting with auto-scaling |
-| **Container Registry** | Private ACR for Docker images with managed identity pull |
-| **Azure AI Foundry** | GPT-4o-mini and text-embedding-3-small model deployments |
-| **PostgreSQL Flexible Server** | Database with pgvector extension for embeddings |
-| **Managed Identity** | Secure authentication to AI Foundry (no API keys!) |
-| **Application Insights** | Monitoring and telemetry |
-| **Log Analytics Workspace** | Centralized logging |
+| Component | Description | Provisioning Time |
+|-----------|-------------|-------------------|
+| **Container Apps Environment** | Serverless container hosting with auto-scaling | ~40s |
+| **Container App** | Cora web application | ~25s |
+| **Container Registry** | Private ACR for Docker images with managed identity pull | ~30s |
+| **Azure AI Foundry** | GPT-4o-mini and text-embedding-3-small model deployments | ~2s |
+| **PostgreSQL Flexible Server** | Database with pgvector extension for embeddings | ~4m |
+| **Managed Identity** | Secure authentication to AI Foundry (no API keys!) | ~5s |
+| **Application Insights** | Monitoring and telemetry | ~10s |
+| **Log Analytics Workspace** | Centralized logging | ~10s |
+
+**Total deployment time: ~10-12 minutes**
 
 ### Key Files Added
 
 ```
 ├── Dockerfile                    # Multi-stage Docker build for web app
-├── docker-compose.full.yml       # Local development with Docker
-├── azure.yaml                    # Azure Developer CLI configuration
+├── Dockerfile.mcp                # MCP server Docker build
+├── docker-compose.yml            # Basic local development
+├── docker-compose.full.yml       # Full local development with all services
+├── docker-start.ps1              # PowerShell script for Docker startup
+├── azure.yaml                    # Azure Developer CLI configuration with hooks
 ├── DOCKER.md                     # Docker documentation
 └── infra/
     ├── main.bicep                # Main infrastructure orchestration
+    ├── main.parameters.json      # Default parameters
     ├── container-apps.bicep      # Container Apps Environment & App
     ├── container-registry.bicep  # ACR with managed identity
     ├── postgresql.bicep          # PostgreSQL with pgvector
+    ├── foundry.bicep             # Azure AI Foundry hub
+    ├── foundry-project.bicep     # AI Foundry project
+    ├── foundry-model-deployment.bicep  # Model deployments
     ├── managed-identity.bicep    # User-assigned managed identity
     ├── ai-foundry-role-assignment.bicep  # RBAC for AI Foundry
-    └── log-analytics.bicep       # Monitoring workspace
+    ├── application-insights.bicep # App Insights resource
+    ├── log-analytics.bicep       # Monitoring workspace
+    ├── deploy.ps1                # PowerShell deployment script
+    └── deploy.sh                 # Bash deployment script
 ```
 
 ### Code Changes for Azure Deployment
@@ -227,29 +306,57 @@ docker-compose -f docker-compose.full.yml up --build
 ### Useful Commands
 
 ```bash
+# View deployment status
+azd env get-values
+
 # View container logs
-az containerapp logs show -n ca-cora-xxx -g rg-zava-cora-dev --tail 100
+az containerapp logs show -n <container-app-name> -g <resource-group> --tail 100
+
+# Restart the container app
+az containerapp revision restart -n <container-app-name> -g <resource-group> --revision <revision-name>
 
 # Redeploy after code changes
 azd deploy
 
 # View all deployed resources
-az resource list -g rg-zava-cora-dev -o table
+az resource list -g <resource-group> -o table
 
-# Remove delete lock (if needed for cleanup)
-az lock delete --name DoNotDelete-ZavaCora --resource-group rg-zava-cora-dev
-
-# Tear down all resources
+# Tear down all resources (with confirmation)
 azd down
+
+# Force tear down and purge soft-deleted resources
+azd down --force --purge
 ```
+
+### Environment Variables Set by Deployment
+
+| Variable | Description |
+|----------|-------------|
+| `PROJECT_ENDPOINT` | Azure AI Foundry project endpoint |
+| `GPT_MODEL_DEPLOYMENT_NAME` | gpt-4o-mini deployment name |
+| `EMBEDDING_MODEL_DEPLOYMENT_NAME` | text-embedding-3-small deployment name |
+| `POSTGRES_SERVER_NAME` | PostgreSQL server hostname |
+| `POSTGRES_DATABASE_NAME` | Database name (zava) |
+| `POSTGRES_ADMIN_PASSWORD` | Admin password (auto-generated) |
+| `AZURE_CLIENT_ID` | Managed identity client ID |
+| `SERVICE_WEB_APP_URI` | Deployed application URL |
 
 ### Security Features
 
-- ✅ **Managed Identity** - No API keys or secrets in code
-- ✅ **Private Container Registry** - Images stored in private ACR
-- ✅ **Delete Lock** - Resource group protected from accidental deletion
+- ✅ **Managed Identity** - No API keys or secrets in code; uses `ManagedIdentityCredential`
+- ✅ **Private Container Registry** - Images stored in private ACR with managed identity pull
 - ✅ **HTTPS Only** - Container App ingress requires HTTPS
 - ✅ **RBAC** - Least-privilege access with Cognitive Services User role
+- ✅ **Secure Database** - PostgreSQL with SSL enforcement and firewall rules
+- ✅ **Row Level Security** - Database includes RLS policies for multi-tenant data access
+
+### Testing the Deployment
+
+After deployment, test Cora by asking questions like:
+- "What drills do you have?"
+- "Show me products under $50"
+- "What stores are available?"
+- "Tell me about cordless power tools"
 
 ### 🌐 Multi-Language Support
 
