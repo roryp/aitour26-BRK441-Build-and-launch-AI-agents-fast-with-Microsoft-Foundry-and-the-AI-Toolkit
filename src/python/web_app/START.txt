@@ -1,0 +1,23 @@
+# Cora Web App - Quick Start
+
+## Prerequisites
+1. Run deploy.sh first (creates Azure resources and .env file)
+2. Run: az login
+
+## Start the Server
+
+# 1. Create virtual environment and install dependencies
+python3 -m venv /workspace/.venv
+source /workspace/.venv/bin/activate
+pip install -r /workspace/src/python/requirements.txt agent-framework-azure-ai --pre
+
+# 2. Start the web app
+cd /workspace/src/python/web_app
+python web_app.py
+
+# 3. Open browser to http://localhost:8000
+
+## Test Questions
+- "What products do you have for painting?"
+- "Show me your best power tools"
+- "I need to fix a leaky faucet"
