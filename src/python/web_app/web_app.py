@@ -1,6 +1,35 @@
 # http://localhost:8000
 
 import sys
+import os
+import logging
+
+# Enable Azure AI content tracing for Foundry observability
+# This MUST be set before importing Azure AI SDKs
+os.environ.setdefault("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "true")
+
+# Configure Azure Monitor OpenTelemetry BEFORE other imports
+# This ensures all instrumentation is properly initialized
+APPLICATIONINSIGHTS_CONNECTION_STRING = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "")
+if APPLICATIONINSIGHTS_CONNECTION_STRING:
+    from azure.monitor.opentelemetry import configure_azure_monitor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    
+    # Configure Azure Monitor with AI inference tracing
+    configure_azure_monitor(
+        connection_string=APPLICATIONINSIGHTS_CONNECTION_STRING,
+        enable_live_metrics=True,
+        logger_name="cora-web-app",
+        instrumentation_options={
+            "azure_sdk": {"enabled": True},  # Enable Azure SDK tracing
+        }
+    )
+    
+    # Instrument httpx for outbound AI API calls
+    HTTPXClientInstrumentor().instrument()
+    
+    logging.getLogger(__name__).info("Azure Monitor OpenTelemetry configured with AI tracing for Foundry observability")
+
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,9 +38,7 @@ import uvicorn
 import json
 import asyncio
 from typing import List, Dict, Optional
-import logging
 import base64
-import os
 from contextlib import AsyncExitStack
 import uuid
 from pathlib import Path
@@ -138,8 +165,8 @@ Your role is to:
 - Engage with the customer in natural conversation to understand their DIY goals.
 - Ask thoughtful questions to gather relevant project details.
 - Be brief in your responses.
-- Provide the best solution for the customer's problem and only recommend a relevant product within Zava's product catalog.
-- Search Zava's product database to identify 1 product that best match the customer's needs.
+- Provide the best solution for the customer's problem and only recommend relevant products within Zava's product catalog.
+- Search Zava's product database to identify ALL matching products (up to 5) that match the customer's needs.
 - Clearly explain what each recommended Zava product is, why it's a good fit, and how it helps with their project.
 - When users provide images, analyze them carefully to understand what they show and how it relates to their DIY project.
 

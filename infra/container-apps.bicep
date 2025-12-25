@@ -128,6 +128,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
               value: applicationInsightsConnectionString
             }
             {
+              name: 'AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED'
+              value: 'true'
+            }
+            {
               name: 'POSTGRES_URL'
               value: postgresConnectionString
             }

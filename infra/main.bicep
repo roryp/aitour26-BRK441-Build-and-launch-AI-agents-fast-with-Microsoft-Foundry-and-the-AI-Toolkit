@@ -151,11 +151,18 @@ module applicationInsights 'application-insights.bicep' = {
 module foundry 'foundry.bicep' = {
   name: 'foundry-account-deployment'
   scope: rg
+  dependsOn: [
+    applicationInsights
+  ]
   params: {
     aiProjectName: aiProjectName
     location: location
     tags: defaultTags
     foundryResourceName: foundryResourceName
+    // Connect Application Insights for Foundry observability/tracing
+    applicationInsightsResourceId: applicationInsights.outputs.applicationInsightsId
+    // Log Analytics workspace for diagnostic settings
+    logAnalyticsWorkspaceId: applicationInsights.outputs.logAnalyticsWorkspaceId
   }
 }
 
