@@ -8,18 +8,27 @@ import logging
 # This MUST be set before importing Azure AI SDKs
 os.environ.setdefault("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "true")
 
+# Set OpenTelemetry service name for Foundry Monitoring dashboard
+# This appears as "Application" filter in the Monitoring UI
+os.environ.setdefault("OTEL_SERVICE_NAME", "cora-web-app")
+
 # Configure Azure Monitor OpenTelemetry BEFORE other imports
 # This ensures all instrumentation is properly initialized
 APPLICATIONINSIGHTS_CONNECTION_STRING = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "")
 if APPLICATIONINSIGHTS_CONNECTION_STRING:
     from azure.monitor.opentelemetry import configure_azure_monitor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+    
+    # Create resource with service name for Foundry Monitoring
+    resource = Resource.create({SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "cora-web-app")})
     
     # Configure Azure Monitor with AI inference tracing
     configure_azure_monitor(
         connection_string=APPLICATIONINSIGHTS_CONNECTION_STRING,
         enable_live_metrics=True,
         logger_name="cora-web-app",
+        resource=resource,
         instrumentation_options={
             "azure_sdk": {"enabled": True},  # Enable Azure SDK tracing
         }
@@ -27,6 +36,30 @@ if APPLICATIONINSIGHTS_CONNECTION_STRING:
     
     # Instrument httpx for outbound AI API calls
     HTTPXClientInstrumentor().instrument()
+    
+    # Instrument asyncpg for PostgreSQL database tracing in Application Map
+    try:
+        from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+        AsyncPGInstrumentor().instrument()
+        logging.getLogger(__name__).info("AsyncPG instrumentation enabled for PostgreSQL tracing")
+    except ImportError:
+        logging.getLogger(__name__).warning("AsyncPGInstrumentor not available - install opentelemetry-instrumentation-asyncpg")
+    
+    # Enable Azure AI Agents instrumentation for content recording
+    try:
+        from azure.ai.agents.telemetry import AIAgentsInstrumentor
+        AIAgentsInstrumentor().instrument()
+        logging.getLogger(__name__).info("Azure AI Agents instrumentation enabled")
+    except ImportError:
+        logging.getLogger(__name__).warning("AIAgentsInstrumentor not available - content tracing may be limited")
+    
+    # Enable Azure AI Inference instrumentation for Responses API content recording
+    try:
+        from azure.ai.inference.tracing import AIInferenceInstrumentor
+        AIInferenceInstrumentor().instrument()
+        logging.getLogger(__name__).info("Azure AI Inference instrumentation enabled for Responses API")
+    except ImportError:
+        logging.getLogger(__name__).warning("AIInferenceInstrumentor not available")
     
     logging.getLogger(__name__).info("Azure Monitor OpenTelemetry configured with AI tracing for Foundry observability")
 
@@ -131,6 +164,7 @@ def create_mcp_tools() -> list[ToolProtocol]:
     mcp_env = {
         "POSTGRES_URL": os.environ.get("POSTGRES_URL", ""),
         "PYTHONPATH": os.environ.get("PYTHONPATH", "/workspace/src/python"),
+        "APPLICATIONINSIGHTS_CONNECTION_STRING": os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", ""),
     }
     return [
         MCPStdioTool(

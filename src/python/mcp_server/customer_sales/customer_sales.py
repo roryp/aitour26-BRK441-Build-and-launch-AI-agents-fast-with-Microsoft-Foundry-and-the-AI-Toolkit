@@ -3,6 +3,30 @@
 Provides comprehensive customer sales database access with individual table schema tools for Zava Retail DIY Business.
 """
 
+import os
+import logging
+
+# Configure OpenTelemetry for PostgreSQL tracing BEFORE any other imports
+APPLICATIONINSIGHTS_CONNECTION_STRING = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "")
+if APPLICATIONINSIGHTS_CONNECTION_STRING:
+    os.environ.setdefault("OTEL_SERVICE_NAME", "mcp-customer-sales")
+    from azure.monitor.opentelemetry import configure_azure_monitor
+    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+    
+    resource = Resource.create({SERVICE_NAME: "mcp-customer-sales"})
+    configure_azure_monitor(
+        connection_string=APPLICATIONINSIGHTS_CONNECTION_STRING,
+        resource=resource,
+    )
+    
+    # Instrument asyncpg for PostgreSQL tracing
+    try:
+        from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+        AsyncPGInstrumentor().instrument()
+        logging.getLogger(__name__).info("AsyncPG instrumentation enabled in MCP server")
+    except ImportError:
+        logging.getLogger(__name__).warning("AsyncPGInstrumentor not available in MCP server")
+
 import argparse
 import asyncio
 from collections.abc import AsyncIterator
