@@ -25,3 +25,6 @@ DevTunnels/devtunnels-tokens-microsoft
 DevTunnels/devtunnels.json
 .azure
 body.json
+infra/workbooks/genai-agent-workbook.json
+infra/workbooks/workbook-body.json
+infra/workbooks/workbook-props.json
