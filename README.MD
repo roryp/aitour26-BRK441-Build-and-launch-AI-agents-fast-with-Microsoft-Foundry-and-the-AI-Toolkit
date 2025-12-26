@@ -365,27 +365,14 @@ Additional languages are coming soon.
 
 ## Content Owners
 
-<!-- TODO: Add yourself as a content owner
-1. Change the src in the image tag to {your github url}.png
-2. Change INSERT NAME HERE to your name
-3. Change the github url in the final href to your url. -->
-
-
 <table>
 <tr>
-    <td align="center"><a href="https://github.com/aprilgittens">
-        <img src="https://github.com/aprilgittens.png" width="100px;" alt="April Gittens"/><br />
-        <sub><b>April Gittens</b></sub></a><br />
-            <a href="https://github.com/aprilgittens" title="talk">📢</a> 
-    </td>
-    <td align="center"><a href="https://github.com/bethanyjep">
-        <img src="https://github.com/bethanyjep.png" width="100px;" alt="Bethany Jepchumba"/><br />
-        <sub><b>Bethany Jepchumba</b></sub></a><br />
-            <a href="https://github.com/bethanyjep" title="talk">📢</a> 
+    <td align="center"><a href="https://github.com/roryp">
+        <img src="https://github.com/roryp.png" width="100px;" alt="Rory Preddy"/><br />
+        <sub><b>Rory Preddy</b></sub></a><br />
+            <a href="https://github.com/roryp" title="talk">📢</a> 
     </td>
 </tr></table>
-
-## 
 
 ## Responsible AI 
 
