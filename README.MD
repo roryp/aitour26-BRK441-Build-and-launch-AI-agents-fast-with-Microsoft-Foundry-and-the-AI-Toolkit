@@ -266,6 +266,7 @@ docker run --rm `
 ├── docker-start.ps1              # PowerShell script for Docker startup
 ├── azure.yaml                    # Azure Developer CLI configuration with hooks
 ├── DOCKER.md                     # Docker documentation
+├── .env.docker                   # Environment template for local Docker development
 └── infra/
     ├── main.bicep                # Main infrastructure orchestration
     ├── main.parameters.json      # Default parameters
@@ -372,17 +373,14 @@ Additional languages are coming soon.
 
 <table>
 <tr>
-    <td align="center"><a href="http://github.com/aprilgitens">
-        <img src="https://github.com/aprilgittens.png" width="100px;" alt="April Gittens"
-"/><br />
-        <sub><b> April Gittens
-</b></sub></a><br />
+    <td align="center"><a href="https://github.com/aprilgittens">
+        <img src="https://github.com/aprilgittens.png" width="100px;" alt="April Gittens"/><br />
+        <sub><b>April Gittens</b></sub></a><br />
             <a href="https://github.com/aprilgittens" title="talk">📢</a> 
     </td>
-    <td align="center"><a href="http://github.com/bethanyjep">
+    <td align="center"><a href="https://github.com/bethanyjep">
         <img src="https://github.com/bethanyjep.png" width="100px;" alt="Bethany Jepchumba"/><br />
-        <sub><b>Bethany Jepchumba
-</b></sub></a><br />
+        <sub><b>Bethany Jepchumba</b></sub></a><br />
             <a href="https://github.com/bethanyjep" title="talk">📢</a> 
     </td>
 </tr></table>
