@@ -7,6 +7,8 @@ import logging
 # Enable Azure AI content tracing for Foundry observability
 # This MUST be set before importing Azure AI SDKs
 os.environ.setdefault("AZURE_TRACING_GEN_AI_CONTENT_RECORDING_ENABLED", "true")
+# Capture binary data including images and files in traces
+os.environ.setdefault("AZURE_TRACING_GEN_AI_INCLUDE_BINARY_DATA", "true")
 
 # Set OpenTelemetry service name for Foundry Monitoring dashboard
 # This appears as "Application" filter in the Monitoring UI
@@ -19,11 +21,15 @@ if APPLICATIONINSIGHTS_CONNECTION_STRING:
     from azure.monitor.opentelemetry import configure_azure_monitor
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
     from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+    from opentelemetry.sdk.trace import SpanProcessor, ReadableSpan
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry import trace as otel_trace
     
     # Create resource with service name for Foundry Monitoring
     resource = Resource.create({SERVICE_NAME: os.environ.get("OTEL_SERVICE_NAME", "cora-web-app")})
     
     # Configure Azure Monitor with AI inference tracing
+    # Use shorter batch intervals for faster trace visibility (default is 5000ms)
     configure_azure_monitor(
         connection_string=APPLICATIONINSIGHTS_CONNECTION_STRING,
         enable_live_metrics=True,
@@ -31,7 +37,7 @@ if APPLICATIONINSIGHTS_CONNECTION_STRING:
         resource=resource,
         instrumentation_options={
             "azure_sdk": {"enabled": True},  # Enable Azure SDK tracing
-        }
+        },
     )
     
     # Instrument httpx for outbound AI API calls
@@ -61,6 +67,14 @@ if APPLICATIONINSIGHTS_CONNECTION_STRING:
     except ImportError:
         logging.getLogger(__name__).warning("AIInferenceInstrumentor not available")
     
+    # Enable Azure AI Projects instrumentation for full project-level tracing (tool calls, etc.)
+    try:
+        from azure.ai.projects.telemetry import AIProjectInstrumentor
+        AIProjectInstrumentor().instrument(enable_content_recording=True)
+        logging.getLogger(__name__).info("Azure AI Projects instrumentation enabled with content recording")
+    except ImportError:
+        logging.getLogger(__name__).warning("AIProjectInstrumentor not available - tool call tracing may be limited")
+    
     logging.getLogger(__name__).info("Azure Monitor OpenTelemetry configured with AI tracing for Foundry observability")
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, UploadFile, File
@@ -72,7 +86,7 @@ import json
 import asyncio
 from typing import List, Dict, Optional
 import base64
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, nullcontext
 import uuid
 from pathlib import Path
 
@@ -119,6 +133,13 @@ load_dotenv()  # Loads variables from .env into os.environ
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Get tracer for custom spans (captures final agent responses)
+try:
+    from opentelemetry import trace
+    tracer = trace.get_tracer("cora-web-app", "1.0.0")
+except ImportError:
+    tracer = None
 
 # Create uploads directory if it doesn't exist
 UPLOAD_DIR = Path("uploads")
@@ -329,17 +350,34 @@ async def websocket_endpoint(websocket: WebSocket):
             if image_url:
                 logger.info(f"With image: {image_url}")
             
-            # Process message with AI agent
-            ai_response = await simulate_ai_agent(user_message, image_url)
-            
-            # Send response back to client
-            response_data = {
-                "type": "ai_response",
-                "message": ai_response,
-                "timestamp": asyncio.get_event_loop().time()
-            }
-            
-            await manager.send_personal_message(json.dumps(response_data), websocket)
+            # Create a parent span for the full chat turn with GenAI semantic conventions
+            # Use gen_ai.prompt and gen_ai.completion for Foundry Input/Output columns
+            with tracer.start_as_current_span(
+                "chat",
+                attributes={
+                    "gen_ai.system": "azure.ai.agents",
+                    "gen_ai.operation.name": "chat",
+                    "gen_ai.request.model": MODEL_DEPLOYMENT_NAME,
+                    "gen_ai.prompt": user_message[:4000],  # Input column
+                }
+            ) if tracer else nullcontext():
+                # Process message with AI agent
+                ai_response = await simulate_ai_agent(user_message, image_url)
+                
+                # Set completion attribute for Foundry Output column
+                if tracer:
+                    current_span = trace.get_current_span()
+                    if current_span:
+                        current_span.set_attribute("gen_ai.completion", ai_response[:4000])  # Output column
+                
+                # Send response back to client
+                response_data = {
+                    "type": "ai_response",
+                    "message": ai_response,
+                    "timestamp": asyncio.get_event_loop().time()
+                }
+                
+                await manager.send_personal_message(json.dumps(response_data), websocket)
             
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -351,15 +389,32 @@ async def simulate_ai_agent(user_message: str, image_url: Optional[str] = None, 
     """
     global agent_instance, agent_threads
     
-    # Initialize agent if not already done
-    if agent_instance is None:
-        await initialize_agent()
-    
-    # If agent is still None, fall back to simple responses
-    if agent_instance is None:
-        return "I'm sorry, I'm having trouble connecting to my tools right now. Please try again later."
+    # Start a span for the entire agent interaction with user input
+    # Use GenAI semantic conventions for Foundry Tracing visibility
+    span_context = tracer.start_as_current_span(
+        "Agent Processing",
+        attributes={
+            "gen_ai.system": "azure.ai.agents",
+            "gen_ai.request.model": MODEL_DEPLOYMENT_NAME,
+            "gen_ai.operation.name": "agent",
+            "gen_ai.prompt": user_message[:4000],  # Input for Foundry
+        }
+    ) if tracer else None
     
     try:
+        if span_context:
+            span_context.__enter__()
+        
+        # Initialize agent if not already done
+        if agent_instance is None:
+            await initialize_agent()
+        
+        # If agent is still None, fall back to simple responses
+        if agent_instance is None:
+            if span_context:
+                span_context.__exit__(None, None, None)
+            return "I'm sorry, I'm having trouble connecting to my tools right now. Please try again later."
+    
         # Get or create thread for this session
         if session_id not in agent_threads:
             agent_threads[session_id] = agent_instance.get_new_thread()
@@ -425,13 +480,33 @@ async def simulate_ai_agent(user_message: str, image_url: Optional[str] = None, 
                 if chunk.text:
                     response_text += chunk.text
         
-        return response_text if response_text else "I processed your request, but I'm having trouble generating a response. Please try rephrasing your question."
+        final_response = response_text if response_text else "I processed your request, but I'm having trouble generating a response. Please try rephrasing your question."
+        
+        # Record the final response in the span for tracing visibility
+        if span_context and tracer:
+            current_span = trace.get_current_span()
+            if current_span:
+                # Set gen_ai.completion for Foundry Output column
+                current_span.set_attribute("gen_ai.completion", final_response[:4000])
+            span_context.__exit__(None, None, None)
+        
+        return final_response
             
     except Exception as e:
         logger.error(f"Error in AI agent processing: {e}")
         import traceback
         traceback.print_exc()
-        return f"I encountered an error while processing your request: {str(e)}. Please try again."
+        error_msg = f"I encountered an error while processing your request: {str(e)}. Please try again."
+        
+        # Record error in span
+        if span_context and tracer:
+            current_span = trace.get_current_span()
+            if current_span:
+                current_span.set_attribute("error", True)
+                current_span.set_attribute("error.message", str(e))
+            span_context.__exit__(type(e), e, e.__traceback__)
+        
+        return error_msg
 
 @app.on_event("startup")
 async def startup_event():
