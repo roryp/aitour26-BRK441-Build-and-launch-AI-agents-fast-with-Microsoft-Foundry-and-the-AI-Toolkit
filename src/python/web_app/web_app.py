@@ -24,7 +24,7 @@ STATIC_DIR = SHARED_STATIC_DIR if SHARED_STATIC_DIR.exists() else Path("static")
 TEMPLATES_DIR = STATIC_DIR if STATIC_DIR.exists() else Path("templates")
 
 # Agent Framework imports
-from agent_framework import ChatAgent, MCPStdioTool, ToolProtocol, ChatMessage, TextContent, DataContent
+from agent_framework import ChatAgent, MCPStdioTool, ToolProtocol, ChatMessage, Content
 from agent_framework.azure import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 
@@ -131,8 +131,8 @@ async def initialize_agent():
                 agent_name=AGENT_NAME,
             )
             
-            # Create agent with the Azure AI client
-            agent_instance = client.create_agent(
+            # Create agent with the Azure AI client using as_agent()
+            agent_instance = client.as_agent(
                 name=AGENT_NAME,
                 instructions=AGENT_INSTRUCTIONS,
                 tools=[
@@ -273,14 +273,14 @@ async def simulate_ai_agent(user_message: str, image_url: Optional[str] = None, 
                     
                     logger.info(f"Image loaded: {len(image_bytes)} bytes, MIME type: {mime_type}")
                     
-                    # Create a ChatMessage with multimodal content using DataContent
+                    # Create a ChatMessage with multimodal content using Content factory methods
                     # Note: use 'contents' (plural) not 'content'
                     message_with_image = [
                         ChatMessage(
                             role="user",
                             contents=[
-                                TextContent(text=user_message),
-                                DataContent(data=image_bytes, media_type=mime_type)
+                                Content.from_text(user_message),
+                                Content.from_data(image_bytes, media_type=mime_type)
                             ]
                         )
                     ]
@@ -319,6 +319,12 @@ async def simulate_ai_agent(user_message: str, image_url: Optional[str] = None, 
         logger.error(f"Error in AI agent processing: {e}")
         import traceback
         traceback.print_exc()
+        
+        # Clear corrupted thread to prevent state mismatch errors
+        if session_id in agent_threads:
+            del agent_threads[session_id]
+            logger.info(f"Cleared corrupted thread for session: {session_id}")
+        
         return f"I encountered an error while processing your request: {str(e)}. Please try again."
 
 @app.on_event("startup")

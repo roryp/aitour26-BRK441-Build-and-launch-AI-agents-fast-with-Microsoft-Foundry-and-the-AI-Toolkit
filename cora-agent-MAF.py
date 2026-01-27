@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from agent_framework import ChatAgent, MCPStdioTool, MCPStreamableHTTPTool, ToolProtocol, ChatMessage, TextContent, DataContent, Role
+from agent_framework import ChatAgent, MCPStdioTool, MCPStreamableHTTPTool, ToolProtocol, ChatMessage, Content, Role
 from agent_framework.azure import AzureAIClient
 from azure.identity.aio import AzureCliCredential
 
@@ -27,16 +27,16 @@ AGENT_INSTRUCTIONS = "You are Cora, an intelligent and friendly AI assistant for
 # User inputs for the conversation (supports multimodal content)
 # Note: For local files, we read them as bytes and use DataContent
 def create_image_content(path: str, mime_type: str):
-    """Read a local image file and create DataContent"""
+    """Read a local image file and create Content from data"""
     with open(path, "rb") as f:
-        return DataContent(data=f.read(), media_type=mime_type)
+        return Content.from_data(f.read(), media_type=mime_type)
 
 USER_INPUTS = [
     ChatMessage(
         role="user",
         contents=[
             create_image_content("img/demo-living-room.png", "image/png"),
-            TextContent(text="Here's a photo of my living room. I'm not sure whether I should go with eggshell or semi-gloss. Can you tell which would work better based on the lighting and layout?"),
+            Content.from_text("Here's a photo of my living room. I'm not sure whether I should go with eggshell or semi-gloss. Can you tell which would work better based on the lighting and layout?"),
         ],
     ),
 ]
@@ -67,7 +67,7 @@ async def main() -> None:
         )
         
         # Create agent with the Azure AI client
-        agent = client.create_agent(
+        agent = client.as_agent(
             name=AGENT_NAME,
             instructions=AGENT_INSTRUCTIONS,
             tools=[
